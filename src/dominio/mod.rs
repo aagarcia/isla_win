@@ -4,4 +4,5 @@ pub mod animacion;
 pub mod color;
 pub mod control;
 pub mod pista;
+pub mod preferencias;
 pub mod visibilidad;

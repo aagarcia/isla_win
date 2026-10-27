@@ -1,14 +1,17 @@
 //! La ventana de la isla: siempre encima, sin foco, fuera de Alt-Tab, pegada al borde superior y centrada.
 //! Decide el tamaño (compacta/expandida) y cuándo repintar; qué dibujar lo decide la `Vista` activa.
 
+use super::bandeja::{self, Orden, WM_BANDEJA};
 use super::escala::Escala;
 use super::gancho::{self, WM_CLIC_FUERA};
 use super::gdi::pintar_con_doble_buffer;
-use super::tema::{COMPACTO, EXPANDIDO, INTERVALO_ANIMACION_MS, RADIO_ISLA};
+use super::tema::{COMPACTO, EXPANDIDO, INTERVALO_ANIMACION_MS, MINIMO, RADIO_ISLA};
 use super::vista;
+use crate::dominio::preferencias::{Preferencias, Reposo};
 use crate::dominio::visibilidad::{visibilidad, Visibilidad, LIMITE_INACTIVIDAD};
 use crate::estado;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
@@ -25,6 +28,12 @@ static EXPANDIDA: AtomicBool = AtomicBool::new(false);
 /// El contenido compacto no cabe y se desplaza: hace falta repintar aunque no suene nada.
 static DESBORDA: AtomicBool = AtomicBool::new(false);
 static TIMER_ACTIVO: AtomicBool = AtomicBool::new(false);
+/// Elecciones del usuario desde la bandeja (en memoria: se pierden al cerrar).
+static PREFERENCIAS: Mutex<Preferencias> = Mutex::new(Preferencias { reposo: Reposo::Compact, oculta_por_usuario: false });
+
+fn preferencias() -> Preferencias {
+    *PREFERENCIAS.lock().unwrap()
+}
 
 pub fn crear() -> windows::core::Result<HWND> {
     unsafe {
@@ -38,13 +47,14 @@ pub fn crear() -> windows::core::Result<HWND> {
             lpszClassName: clase,
             ..Default::default()
         });
-        let (ancho, alto) = dimensiones(false);
+        let (ancho, alto) = dimensiones();
         let ventana = CreateWindowExW(
             WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
             clase, PCWSTR::null(), WS_POPUP, 0, 0, ancho, alto, None, None, Some(instancia.into()), None,
         )?;
         let _ = SetLayeredWindowAttributes(ventana, COLORREF(0), 255, LWA_ALPHA);
         aplicar_tamano(ventana);
+        bandeja::agregar(ventana)?;
         Ok(ventana)
     }
 }
@@ -71,6 +81,8 @@ unsafe extern "system" fn procedimiento(ventana: HWND, mensaje: u32, wparam: WPA
         match mensaje {
             WM_ESTADO_CAMBIADO => al_cambiar_estado(ventana),
             WM_CLIC_FUERA => al_clic_fuera(ventana),
+            WM_BANDEJA => al_tocar_bandeja(ventana, lparam),
+            WM_COMMAND => al_elegir_en_menu(ventana, wparam),
             WM_TIMER if wparam.0 == ID_TIMER_INACTIVIDAD => al_cambiar_estado(ventana), // venció la espera
             WM_TIMER => al_temporizador(ventana),
             WM_LBUTTONDOWN => al_clic(ventana, coordenadas(lparam)),
@@ -79,6 +91,7 @@ unsafe extern "system" fn procedimiento(ventana: HWND, mensaje: u32, wparam: WPA
             WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize), // clic sin robar el foco
             WM_ERASEBKGND => return LRESULT(1),                          // se pinta todo, sin parpadeo
             WM_DESTROY => {
+                bandeja::quitar(ventana);
                 gancho::desactivar();
                 PostQuitMessage(0);
             }
@@ -93,7 +106,8 @@ unsafe extern "system" fn procedimiento(ventana: HWND, mensaje: u32, wparam: WPA
 unsafe fn al_cambiar_estado(ventana: HWND) {
     unsafe {
         let reproduciendo = estado::pista().map(|p| p.reproduciendo);
-        match visibilidad(reproduciendo, estado::pausada_desde(), Instant::now(), LIMITE_INACTIVIDAD) {
+        let automatica = visibilidad(reproduciendo, estado::pausada_desde(), Instant::now(), LIMITE_INACTIVIDAD);
+        match preferencias().aplicar(automatica) {
             Visibilidad::Oculta => ocultar(ventana),
             Visibilidad::Visible => mostrar(ventana, None),
             Visibilidad::VisibleDurante(resto) => mostrar(ventana, Some(resto)),
@@ -142,6 +156,47 @@ unsafe fn al_clic(ventana: HWND, punto: POINT) {
     }
 }
 
+/// Clic en el icono de la bandeja: el izquierdo oculta/muestra, el derecho abre el menú.
+unsafe fn al_tocar_bandeja(ventana: HWND, lparam: LPARAM) {
+    unsafe {
+        match bandeja::evento_de_raton(lparam) {
+            WM_LBUTTONUP => ejecutar(ventana, Orden::AlternarVisibilidad),
+            WM_RBUTTONUP => bandeja::mostrar_menu(ventana, &preferencias()),
+            _ => {}
+        }
+    }
+}
+
+unsafe fn al_elegir_en_menu(ventana: HWND, wparam: WPARAM) {
+    unsafe {
+        if let Some(orden) = Orden::desde_id(wparam.0 & 0xFFFF) {
+            ejecutar(ventana, orden);
+        }
+    }
+}
+
+unsafe fn ejecutar(ventana: HWND, orden: Orden) {
+    unsafe {
+        match orden {
+            Orden::AlternarVisibilidad => {
+                let mut p = PREFERENCIAS.lock().unwrap();
+                p.oculta_por_usuario = !p.oculta_por_usuario;
+                drop(p);
+                al_cambiar_estado(ventana);
+            }
+            Orden::Reposo(reposo) => {
+                PREFERENCIAS.lock().unwrap().reposo = reposo;
+                aplicar_tamano(ventana);
+                let _ = InvalidateRect(Some(ventana), None, false);
+                ajustar_temporizador(ventana);
+            }
+            Orden::Cerrar => {
+                let _ = DestroyWindow(ventana);
+            }
+        }
+    }
+}
+
 unsafe fn al_clic_fuera(ventana: HWND) {
     unsafe {
         if EXPANDIDA.load(Ordering::Relaxed) {
@@ -174,15 +229,15 @@ unsafe fn al_pintar(ventana: HWND) {
         let hdc = BeginPaint(ventana, &mut pintura);
         let area = area_cliente(ventana);
         let expandida = EXPANDIDA.load(Ordering::Relaxed);
+        let reposo = preferencias().reposo;
         let desborda = pintar_con_doble_buffer(hdc, area.right, area.bottom, Escala::actual(), |lienzo| {
-            match vista::activa() {
-                Some(v) if expandida => {
-                    v.expandida(lienzo, area);
-                    false
-                }
-                Some(v) => v.compacta(lienzo, area),
-                None => false,
+            let Some(v) = vista::activa() else { return false };
+            match (expandida, reposo) {
+                (true, _) => v.expandida(lienzo, area),
+                (false, Reposo::Minimal) => v.minimal(lienzo, area),
+                (false, Reposo::Compact) => return v.compacta(lienzo, area),
             }
+            false
         });
         DESBORDA.store(desborda, Ordering::Relaxed);
         let _ = EndPaint(ventana, &pintura);
@@ -192,8 +247,13 @@ unsafe fn al_pintar(ventana: HWND) {
 
 // ---------- tamaño, forma y temporizador ----------
 
-fn dimensiones(expandida: bool) -> (i32, i32) {
-    let (ancho, alto) = if expandida { EXPANDIDO } else { COMPACTO };
+/// Tamaño actual: el expandido si se abrió con un clic; si no, el de reposo que eligió el usuario.
+fn dimensiones() -> (i32, i32) {
+    let (ancho, alto) = match (EXPANDIDA.load(Ordering::Relaxed), preferencias().reposo) {
+        (true, _) => EXPANDIDO,
+        (false, Reposo::Minimal) => MINIMO,
+        (false, Reposo::Compact) => COMPACTO,
+    };
     let escala = Escala::actual();
     (escala.px(ancho), escala.px(alto))
 }
@@ -201,7 +261,7 @@ fn dimensiones(expandida: bool) -> (i32, i32) {
 /// Ajusta tamaño y forma según el estado; sigue centrada y pegada arriba.
 unsafe fn aplicar_tamano(ventana: HWND) {
     unsafe {
-        let (ancho, alto) = dimensiones(EXPANDIDA.load(Ordering::Relaxed));
+        let (ancho, alto) = dimensiones();
         let x = (GetSystemMetrics(SM_CXSCREEN) - ancho) / 2;
         let _ = SetWindowPos(ventana, None, x, 0, ancho, alto, SWP_NOACTIVATE | SWP_NOZORDER);
         // esquinas superiores rectas: el redondeo sube por encima del borde de la pantalla

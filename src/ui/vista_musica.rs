@@ -164,6 +164,11 @@ impl VistaMusica {
 }
 
 impl Vista for VistaMusica {
+    fn minimal(&self, lienzo: &Lienzo, area: RECT) {
+        let centro_x = (area.left + area.right) / 2;
+        self.dibujar_onda(lienzo, centro_x + lienzo.escala.px(ANCHO_ONDA) / 2, area.bottom / 2);
+    }
+
     fn compacta(&self, lienzo: &Lienzo, area: RECT) -> bool {
         let e = lienzo.escala;
         let (margen, lado) = (e.px(MARGEN_COMPACTO), e.px(PORTADA_COMPACTA));

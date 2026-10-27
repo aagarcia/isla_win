@@ -14,6 +14,8 @@ expande para controlarlo.
 | Compact de música (portada, título que se desplaza, wave) | Hecho |
 | Expanded (portada, título, artista, progreso, anterior / play-pausa / siguiente) | Hecho, controles verificados con Spotify |
 | Ocultarse a los 3 min de pausa; reaparece al reproducir | Hecho |
+| Icono en la bandeja: ocultar/mostrar, tamaño en reposo (Minimal/Compact), cerrar | Hecho (órdenes y tamaños verificados; menú visual sin verificar) |
+| Minimal de música (solo la onda) | Hecho (sin verificar visualmente) |
 | Minimal, batería, llamada, descarga, temporizador | Pendiente (ver mockup) |
 | Ocultarse con apps a pantalla completa | Pendiente |
 | Icono de bandeja (salir, configuración, arranque con Windows) | Pendiente |
@@ -26,7 +28,12 @@ expande para controlarlo.
 - **Pausa o parada** → la isla sigue visible **3 minutos** y luego se oculta del todo (no se ve). No
   reaparece por eventos de la canción en pausa: solo cuando vuelve a **reproducir**. Sin sesión multimedia
   (p. ej. cerraste Spotify) se oculta al instante, porque no hay nada que mostrar.
-- Para cerrarla (aún no hay bandeja): `Stop-Process -Name isla_win`.
+- **Icono de la bandeja** (junto al reloj; en Windows 11 puede quedar en el menú `^` de iconos ocultos):
+  clic izquierdo = ocultar/mostrar; clic derecho = menú con **Ocultar/Mostrar isla**, **Tamaño en reposo**
+  (Minimal o Compact) y **Cerrar**. El Expanded no se elige: se abre con un clic desde Minimal o Compact y al
+  compactar vuelve al tamaño elegido.
+- **Ocultar a mano** es independiente de lo anterior: oculta aunque suene música, hasta que la muestres de nuevo
+  (si no suena nada, "Mostrar" no la hace aparecer: sigue mandando la regla de los 3 minutos).
 
 ## Requisitos para compilar
 
@@ -52,6 +59,7 @@ src/
 │   ├── color.rs       color de marca por app y color dominante de la portada
 │   ├── animacion.rs   desplazamiento del título y fase de la onda
 │   ├── visibilidad.rs cuándo se ve la isla (suena / pausa / 3 min de inactividad)
+│   ├── preferencias.rs lo que elige el usuario (tamaño en reposo, ocultar a mano)
 │   └── control.rs     Accion y el trait ControlMedios
 ├── estado.rs          lo que suena + el control: único punto de contacto ui ↔ smtc
 ├── smtc/              origen de datos (sesión multimedia de Windows)
@@ -64,6 +72,7 @@ src/
     ├── vista_musica.rs  la vista de música (compacta y expandida)
     ├── gdi.rs         primitivas de dibujo (todo el `unsafe` del dibujo está aquí)
     ├── iconos.rs      iconos de control
+    ├── bandeja.rs     icono junto al reloj, su menú y su icono dibujado en código
     ├── gancho.rs      gancho de ratón para el clic fuera
     ├── tema.rs        medidas y colores
     └── escala.rs      escala por DPI
@@ -109,8 +118,8 @@ Decisiones que mantienen el consumo bajo:
 cargo test
 ```
 
-21 pruebas sobre el dominio y la escala: progreso, desplazamiento del título, colores de marca y dominante,
-visibilidad por inactividad, escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
+28 pruebas sobre el dominio, la escala y el icono: progreso, desplazamiento del título, colores de marca y
+dominante, visibilidad por inactividad, preferencias, órdenes del menú, píxeles del icono, escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
 
 ## Mediciones (orientativas, no un benchmark)
 
@@ -130,6 +139,9 @@ El `.exe` pesa ~142 KB.
   pasar a DirectComposition.
 - Las suscripciones SMTC se acumulan cuando cambia la sesión actual; des-suscribir si se adopta.
 - Sin transición suave al expandir/compactar ni al cambiar de canción: el tamaño cambia de golpe.
+- Las preferencias (tamaño en reposo, ocultar) viven en memoria: se pierden al cerrar. Tampoco hay arranque
+  con Windows todavía.
+- Si el Explorador se reinicia, el icono de la bandeja no se vuelve a crear (falta escuchar `TaskbarCreated`).
 - Posición única: centrada en la pantalla principal (`SM_CXSCREEN`); sin selector de monitor.
 - No se probó en un portátil con la cámara real ni con pantalla LCD vs OLED (el negro puede no coincidir
   con el marco).

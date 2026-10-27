@@ -1,5 +1,6 @@
 //! Interfaz: ventana, dibujo y vistas. Solo conoce el dominio y `estado`, nunca a SMTC.
 
+mod bandeja;
 mod escala;
 mod gancho;
 mod gdi;

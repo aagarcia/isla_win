@@ -3,6 +3,7 @@
 use super::gdi::Fuente;
 use crate::dominio::color::Rgb;
 
+pub const MINIMO: (i32, i32) = (100, 30);
 pub const COMPACTO: (i32, i32) = (270, 42);
 pub const EXPANDIDO: (i32, i32) = (420, 150);
 /// Radio de las esquinas inferiores de la isla.

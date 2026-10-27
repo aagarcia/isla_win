@@ -7,6 +7,9 @@ use super::vista_musica::VistaMusica;
 use windows::Win32::Foundation::{POINT, RECT};
 
 pub trait Vista {
+    /// Pinta el estado minimal: solo lo esencial (en música, la onda).
+    fn minimal(&self, lienzo: &Lienzo, area: RECT);
+
     /// Pinta el estado compacto. Devuelve true si el contenido no cabe y se desplaza (necesita repintado).
     fn compacta(&self, lienzo: &Lienzo, area: RECT) -> bool;
 
