@@ -13,7 +13,7 @@ expande para controlarlo.
 |---|---|
 | Compact de música (portada, título que se desplaza, wave) | Hecho |
 | Expanded (portada, título, artista, progreso, anterior / play-pausa / siguiente) | Hecho, controles verificados con Spotify |
-| Ocultarse cuando no hay sesión multimedia | Hecho |
+| Ocultarse a los 3 min de pausa; reaparece al reproducir | Hecho |
 | Minimal, batería, llamada, descarga, temporizador | Pendiente (ver mockup) |
 | Ocultarse con apps a pantalla completa | Pendiente |
 | Icono de bandeja (salir, configuración, arranque con Windows) | Pendiente |
@@ -23,7 +23,9 @@ expande para controlarlo.
 - Suena algo en Windows → la isla aparece sola (también en pausa).
 - **Clic** en la isla → se expande. En el Expanded, los botones controlan la reproducción; un **clic en
   cualquier otra zona de la isla, o en cualquier lugar fuera de ella**, la vuelve a compactar.
-- Sin sesión multimedia → se oculta.
+- **Pausa o parada** → la isla sigue visible **3 minutos** y luego se oculta del todo (no se ve). No
+  reaparece por eventos de la canción en pausa: solo cuando vuelve a **reproducir**. Sin sesión multimedia
+  (p. ej. cerraste Spotify) se oculta al instante, porque no hay nada que mostrar.
 - Para cerrarla (aún no hay bandeja): `Stop-Process -Name isla_win`.
 
 ## Requisitos para compilar
@@ -49,6 +51,7 @@ src/
 │   ├── pista.rs       Pista, Portada, progreso
 │   ├── color.rs       color de marca por app y color dominante de la portada
 │   ├── animacion.rs   desplazamiento del título y fase de la onda
+│   ├── visibilidad.rs cuándo se ve la isla (suena / pausa / 3 min de inactividad)
 │   └── control.rs     Accion y el trait ControlMedios
 ├── estado.rs          lo que suena + el control: único punto de contacto ui ↔ smtc
 ├── smtc/              origen de datos (sesión multimedia de Windows)
@@ -106,8 +109,8 @@ Decisiones que mantienen el consumo bajo:
 cargo test
 ```
 
-15 pruebas sobre el dominio y la escala: progreso, desplazamiento del título, colores de marca y dominante,
-escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
+21 pruebas sobre el dominio y la escala: progreso, desplazamiento del título, colores de marca y dominante,
+visibilidad por inactividad, escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
 
 ## Mediciones (orientativas, no un benchmark)
 
@@ -127,7 +130,6 @@ El `.exe` pesa ~142 KB.
   pasar a DirectComposition.
 - Las suscripciones SMTC se acumulan cuando cambia la sesión actual; des-suscribir si se adopta.
 - Sin transición suave al expandir/compactar ni al cambiar de canción: el tamaño cambia de golpe.
-- Una pista en pausa sigue visible hasta que la sesión desaparece.
 - Posición única: centrada en la pantalla principal (`SM_CXSCREEN`); sin selector de monitor.
 - No se probó en un portátil con la cámara real ni con pantalla LCD vs OLED (el negro puede no coincidir
   con el marco).

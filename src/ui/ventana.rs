@@ -6,8 +6,10 @@ use super::gancho::{self, WM_CLIC_FUERA};
 use super::gdi::pintar_con_doble_buffer;
 use super::tema::{COMPACTO, EXPANDIDO, INTERVALO_ANIMACION_MS, RADIO_ISLA};
 use super::vista;
+use crate::dominio::visibilidad::{visibilidad, Visibilidad, LIMITE_INACTIVIDAD};
 use crate::estado;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::*;
@@ -17,6 +19,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 /// Mensaje a la ventana: cambió lo que suena y hay que reaccionar.
 const WM_ESTADO_CAMBIADO: u32 = WM_APP;
 const ID_TIMER_ANIMACION: usize = 1;
+const ID_TIMER_INACTIVIDAD: usize = 2;
 
 static EXPANDIDA: AtomicBool = AtomicBool::new(false);
 /// El contenido compacto no cabe y se desplaza: hace falta repintar aunque no suene nada.
@@ -68,6 +71,7 @@ unsafe extern "system" fn procedimiento(ventana: HWND, mensaje: u32, wparam: WPA
         match mensaje {
             WM_ESTADO_CAMBIADO => al_cambiar_estado(ventana),
             WM_CLIC_FUERA => al_clic_fuera(ventana),
+            WM_TIMER if wparam.0 == ID_TIMER_INACTIVIDAD => al_cambiar_estado(ventana), // venció la espera
             WM_TIMER => al_temporizador(ventana),
             WM_LBUTTONDOWN => al_clic(ventana, coordenadas(lparam)),
             WM_SETCURSOR => al_poner_cursor(ventana),
@@ -88,17 +92,41 @@ unsafe extern "system" fn procedimiento(ventana: HWND, mensaje: u32, wparam: WPA
 
 unsafe fn al_cambiar_estado(ventana: HWND) {
     unsafe {
-        let hay_pista = estado::pista().is_some();
-        if !hay_pista {
-            EXPANDIDA.store(false, Ordering::Relaxed);
-            gancho::desactivar();
-            aplicar_tamano(ventana);
-        }
-        let _ = ShowWindow(ventana, if hay_pista { SW_SHOWNOACTIVATE } else { SW_HIDE });
-        if hay_pista {
-            let _ = InvalidateRect(Some(ventana), None, false);
+        let reproduciendo = estado::pista().map(|p| p.reproduciendo);
+        match visibilidad(reproduciendo, estado::pausada_desde(), Instant::now(), LIMITE_INACTIVIDAD) {
+            Visibilidad::Oculta => ocultar(ventana),
+            Visibilidad::Visible => mostrar(ventana, None),
+            Visibilidad::VisibleDurante(resto) => mostrar(ventana, Some(resto)),
         }
         ajustar_temporizador(ventana);
+    }
+}
+
+/// Oculta la isla del todo (no se ve) y deja todo en reposo: compacta, sin gancho y sin animación.
+unsafe fn ocultar(ventana: HWND) {
+    unsafe {
+        EXPANDIDA.store(false, Ordering::Relaxed);
+        DESBORDA.store(false, Ordering::Relaxed); // oculta no se pinta: sin esto el temporizador no se apagaría
+        gancho::desactivar();
+        let _ = KillTimer(Some(ventana), ID_TIMER_INACTIVIDAD);
+        aplicar_tamano(ventana);
+        let _ = ShowWindow(ventana, SW_HIDE);
+    }
+}
+
+/// Muestra la isla; con `ocultar_en` programa ocultarla pasado ese tiempo (música en pausa).
+unsafe fn mostrar(ventana: HWND, ocultar_en: Option<Duration>) {
+    unsafe {
+        let _ = ShowWindow(ventana, SW_SHOWNOACTIVATE);
+        let _ = InvalidateRect(Some(ventana), None, false);
+        match ocultar_en {
+            Some(resto) => {
+                SetTimer(Some(ventana), ID_TIMER_INACTIVIDAD, resto.as_millis().min(u32::MAX as u128) as u32, None);
+            }
+            None => {
+                let _ = KillTimer(Some(ventana), ID_TIMER_INACTIVIDAD);
+            }
+        }
     }
 }
 
