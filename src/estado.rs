@@ -3,15 +3,16 @@
 
 use crate::dominio::control::{Accion, ControlMedios};
 use crate::dominio::pista::Pista;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
-static PISTA: Mutex<Option<Pista>> = Mutex::new(None);
+static PISTA: Mutex<Option<Arc<Pista>>> = Mutex::new(None);
 static ULTIMO_CAMBIO: Mutex<Option<Instant>> = Mutex::new(None);
 static PAUSADA_DESDE: Mutex<Option<Instant>> = Mutex::new(None);
 static CONTROL: OnceLock<Box<dyn ControlMedios>> = OnceLock::new();
 
-pub fn pista() -> Option<Pista> {
+/// La pista actual. Es un `Arc`: leerla no copia los textos ni la portada.
+pub fn pista() -> Option<Arc<Pista>> {
     PISTA.lock().unwrap().clone()
 }
 
@@ -27,7 +28,7 @@ pub fn publicar(nueva: Option<Pista>) -> bool {
     if cambio {
         *ULTIMO_CAMBIO.lock().unwrap() = Some(Instant::now());
     }
-    *actual = nueva;
+    *actual = nueva.map(Arc::new);
     cambio
 }
 

@@ -4,9 +4,9 @@
 use super::bandeja::{self, Orden, WM_BANDEJA};
 use super::escala::Escala;
 use super::gancho::{self, WM_CLIC_FUERA};
-use super::gdi::pintar_con_doble_buffer;
+use super::gdi::pintar_en_capas;
 use super::tema::{COMPACTO, EXPANDIDO, INTERVALO_ANIMACION_MS, MINIMO, RADIO_ISLA};
-use super::vista;
+use super::vista::{self, Modo};
 use crate::dominio::preferencias::{Preferencias, Reposo};
 use crate::dominio::visibilidad::{visibilidad, Visibilidad, LIMITE_INACTIVIDAD};
 use crate::estado;
@@ -25,8 +25,8 @@ const ID_TIMER_ANIMACION: usize = 1;
 const ID_TIMER_INACTIVIDAD: usize = 2;
 
 static EXPANDIDA: AtomicBool = AtomicBool::new(false);
-/// El contenido compacto no cabe y se desplaza: hace falta repintar aunque no suene nada.
-static DESBORDA: AtomicBool = AtomicBool::new(false);
+/// Hay algo desplazándose (un título largo): hace falta repintar aunque no suene nada.
+static EN_MOVIMIENTO: AtomicBool = AtomicBool::new(false);
 static TIMER_ACTIVO: AtomicBool = AtomicBool::new(false);
 /// Elecciones del usuario desde la bandeja (en memoria: se pierden al cerrar).
 static PREFERENCIAS: Mutex<Preferencias> = Mutex::new(Preferencias { reposo: Reposo::Compact, oculta_por_usuario: false });
@@ -120,7 +120,7 @@ unsafe fn al_cambiar_estado(ventana: HWND) {
 unsafe fn ocultar(ventana: HWND) {
     unsafe {
         EXPANDIDA.store(false, Ordering::Relaxed);
-        DESBORDA.store(false, Ordering::Relaxed); // oculta no se pinta: sin esto el temporizador no se apagaría
+        EN_MOVIMIENTO.store(false, Ordering::Relaxed); // oculta no se pinta: sin esto el temporizador no se apagaría
         gancho::desactivar();
         let _ = KillTimer(Some(ventana), ID_TIMER_INACTIVIDAD);
         aplicar_tamano(ventana);
@@ -227,21 +227,31 @@ unsafe fn al_pintar(ventana: HWND) {
     unsafe {
         let mut pintura = PAINTSTRUCT::default();
         let hdc = BeginPaint(ventana, &mut pintura);
-        let area = area_cliente(ventana);
-        let expandida = EXPANDIDA.load(Ordering::Relaxed);
-        let reposo = preferencias().reposo;
-        let desborda = pintar_con_doble_buffer(hdc, area.right, area.bottom, Escala::actual(), |lienzo| {
-            let Some(v) = vista::activa() else { return false };
-            match (expandida, reposo) {
-                (true, _) => v.expandida(lienzo, area),
-                (false, Reposo::Minimal) => v.minimal(lienzo, area),
-                (false, Reposo::Compact) => return v.compacta(lienzo, area),
-            }
-            false
-        });
-        DESBORDA.store(desborda, Ordering::Relaxed);
+        if let Some(v) = vista::activa() {
+            let area = area_cliente(ventana);
+            let modo = modo_actual();
+            let en_movimiento = pintar_en_capas(
+                hdc,
+                area.right,
+                area.bottom,
+                Escala::actual(),
+                v.huella_estatica(modo, area),
+                |lienzo| v.pintar_estatico(lienzo, area, modo),
+                |lienzo| v.pintar_dinamico(lienzo, area, modo),
+            );
+            EN_MOVIMIENTO.store(en_movimiento, Ordering::Relaxed);
+        }
         let _ = EndPaint(ventana, &pintura);
         ajustar_temporizador(ventana);
+    }
+}
+
+/// El tamaño que se pinta ahora: el expandido si se abrió con un clic; si no, el de reposo elegido.
+fn modo_actual() -> Modo {
+    match (EXPANDIDA.load(Ordering::Relaxed), preferencias().reposo) {
+        (true, _) => Modo::Expandido,
+        (false, Reposo::Minimal) => Modo::Minimal,
+        (false, Reposo::Compact) => Modo::Compacto,
     }
 }
 
@@ -249,10 +259,10 @@ unsafe fn al_pintar(ventana: HWND) {
 
 /// Tamaño actual: el expandido si se abrió con un clic; si no, el de reposo que eligió el usuario.
 fn dimensiones() -> (i32, i32) {
-    let (ancho, alto) = match (EXPANDIDA.load(Ordering::Relaxed), preferencias().reposo) {
-        (true, _) => EXPANDIDO,
-        (false, Reposo::Minimal) => MINIMO,
-        (false, Reposo::Compact) => COMPACTO,
+    let (ancho, alto) = match modo_actual() {
+        Modo::Expandido => EXPANDIDO,
+        Modo::Minimal => MINIMO,
+        Modo::Compacto => COMPACTO,
     };
     let escala = Escala::actual();
     (escala.px(ancho), escala.px(alto))
@@ -286,7 +296,7 @@ unsafe fn cambiar_expansion(ventana: HWND, expandir: bool) {
 /// El temporizador solo corre mientras algo se anima; en reposo no gasta CPU.
 unsafe fn ajustar_temporizador(ventana: HWND) {
     unsafe {
-        let animar = vista::activa().is_some_and(|v| v.animando()) || DESBORDA.load(Ordering::Relaxed);
+        let animar = vista::activa().is_some_and(|v| v.animando()) || EN_MOVIMIENTO.load(Ordering::Relaxed);
         if TIMER_ACTIVO.swap(animar, Ordering::Relaxed) == animar {
             return;
         }

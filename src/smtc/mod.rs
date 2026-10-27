@@ -7,12 +7,38 @@ mod portada;
 
 use crate::dominio::control::{Accion, ControlMedios};
 use crate::estado;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use windows::Foundation::TypedEventHandler;
-use windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager as Gestor;
+use windows::Media::Control::{
+    GlobalSystemMediaTransportControlsSession as Sesion,
+    GlobalSystemMediaTransportControlsSessionManager as Gestor,
+};
 
 type AlCambiar = Arc<dyn Fn() + Send + Sync>;
+
+/// Número del último reintento de portada lanzado: los hilos anteriores ven que ya no son los vigentes y terminan.
+static REINTENTO_VIGENTE: AtomicU64 = AtomicU64::new(0);
+
+/// Manejadores de eventos de la sesión actual. Al sustituirla se des-suscriben los anteriores,
+/// para que cada evento provoque una sola lectura por mucho que cambie la sesión.
+struct Suscripcion {
+    sesion: Sesion,
+    propiedades: i64,
+    reproduccion: i64,
+    linea_de_tiempo: i64,
+}
+
+impl Drop for Suscripcion {
+    fn drop(&mut self) {
+        let _ = self.sesion.RemoveMediaPropertiesChanged(self.propiedades);
+        let _ = self.sesion.RemovePlaybackInfoChanged(self.reproduccion);
+        let _ = self.sesion.RemoveTimelinePropertiesChanged(self.linea_de_tiempo);
+    }
+}
+
+static SUSCRIPCION: Mutex<Option<Suscripcion>> = Mutex::new(None);
 
 /// Esperas entre intentos de leer la portada tras un cambio de canción: Spotify a veces la publica
 /// con mucho retraso (medido: más de 14 s). El hilo termina en cuanto la tiene.
@@ -35,7 +61,6 @@ pub fn iniciar(al_cambiar: impl Fn() + Send + Sync + 'static) -> windows::core::
     Ok(())
 }
 
-/// shortcut: las suscripciones se acumulan cada vez que cambia la sesión actual; des-suscribir si se adopta.
 fn vigilar(gestor: &Gestor, al_cambiar: &AlCambiar) {
     actualizar(gestor, al_cambiar);
     let Ok(sesion) = gestor.GetCurrentSession() else { return };
@@ -50,9 +75,15 @@ fn vigilar(gestor: &Gestor, al_cambiar: &AlCambiar) {
             })
         }};
     }
-    let _ = sesion.MediaPropertiesChanged(&al_evento!());
-    let _ = sesion.PlaybackInfoChanged(&al_evento!());
-    let _ = sesion.TimelinePropertiesChanged(&al_evento!());
+    let suscripcion = (
+        sesion.MediaPropertiesChanged(&al_evento!()),
+        sesion.PlaybackInfoChanged(&al_evento!()),
+        sesion.TimelinePropertiesChanged(&al_evento!()),
+    );
+    if let (Ok(propiedades), Ok(reproduccion), Ok(linea_de_tiempo)) = suscripcion {
+        // al sustituir la anterior se descarta y se des-suscribe
+        *SUSCRIPCION.lock().unwrap() = Some(Suscripcion { sesion, propiedades, reproduccion, linea_de_tiempo });
+    }
 }
 
 fn actualizar(gestor: &Gestor, al_cambiar: &AlCambiar) {
@@ -65,10 +96,12 @@ fn actualizar(gestor: &Gestor, al_cambiar: &AlCambiar) {
 }
 
 fn reintentar_portada(gestor: Gestor, al_cambiar: AlCambiar) {
+    let mio = REINTENTO_VIGENTE.fetch_add(1, Ordering::Relaxed) + 1;
     std::thread::spawn(move || {
         for espera in ESPERAS_PORTADA_MS {
             std::thread::sleep(Duration::from_millis(espera));
-            if estado::pista().is_some_and(|p| p.portada.is_some()) {
+            let sustituido = REINTENTO_VIGENTE.load(Ordering::Relaxed) != mio; // cambió otra vez de canción
+            if sustituido || estado::pista().is_some_and(|p| p.portada.is_some()) {
                 break;
             }
             actualizar(&gestor, &al_cambiar);

@@ -1,16 +1,17 @@
 //! Vista de música: portada, título/artista, onda, progreso y controles.
 
 use super::escala::Escala;
-use super::gdi::Lienzo;
+use super::gdi::{Fuente, Lienzo};
 use super::iconos::{self, Icono};
 use super::tema::*;
-use super::vista::Vista;
+use super::vista::{Modo, Vista};
 use crate::dominio::control::Accion;
 use crate::dominio::{animacion, pista::Pista};
 use crate::estado;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
 use windows::Win32::Foundation::{POINT, RECT};
-use windows::Win32::Graphics::Gdi::{DRAW_TEXT_FORMAT, DT_CENTER, DT_END_ELLIPSIS};
-use windows::Win32::Graphics::Gdi::PtInRect;
+use windows::Win32::Graphics::Gdi::{PtInRect, DRAW_TEXT_FORMAT, DT_CENTER, DT_END_ELLIPSIS};
 
 // Estado compacto (px a 96 dpi)
 const MARGEN_COMPACTO: i32 = 14;
@@ -45,7 +46,7 @@ const SEPARADOR: &str = "·";
 const SIN_FORMATO_EXTRA: DRAW_TEXT_FORMAT = DRAW_TEXT_FORMAT(0);
 
 pub struct VistaMusica {
-    pista: Pista,
+    pista: Arc<Pista>,
 }
 
 impl VistaMusica {
@@ -78,7 +79,7 @@ impl VistaMusica {
             None => {
                 // SMTC no la entrega: relleno neutro con una nota, que no parece un fallo de carga
                 lienzo.rect_lleno(zona, GRIS_SIN_PORTADA, radio);
-                let fuente = super::gdi::Fuente { px: lado_diseno * 3 / 5, peso: 400 };
+                let fuente = Fuente { px: lado_diseno * 3 / 5, peso: 400 };
                 lienzo.texto("♪", zona, fuente, GRIS_NOTA, DT_CENTER);
             }
         }
@@ -103,7 +104,7 @@ impl VistaMusica {
         }
     }
 
-    /// `título · artista` en tres tramos que se desplazan juntos si no caben. Devuelve si se desplazan.
+    /// `título · artista` en tres tramos que se desplazan juntos si no caben. Devuelve true mientras se desplazan.
     fn dibujar_titulo_artista_desplazable(&self, lienzo: &Lienzo, zona: RECT) -> bool {
         let e = lienzo.escala;
         let p = &self.pista;
@@ -115,11 +116,12 @@ impl VistaMusica {
         );
         let total = anchos.0 + hueco + anchos.1 + hueco + anchos.2;
         let disponible = zona.right - zona.left;
-        let desborda = total > disponible;
-        let desplazamiento = if desborda {
-            animacion::desplazamiento(total - disponible, estado::ms_desde_el_cambio(), e.px(VELOCIDAD_DESPLAZAMIENTO))
+        let sobra = total - disponible;
+        let (desplazamiento, moviendose) = if sobra > 0 {
+            let (ms, velocidad) = (estado::ms_desde_el_cambio(), e.px(VELOCIDAD_DESPLAZAMIENTO));
+            (animacion::desplazamiento(sobra, ms, velocidad), animacion::sigue_moviendose(sobra, ms, velocidad))
         } else {
-            0
+            (0, false)
         };
 
         lienzo.recortar(zona);
@@ -131,18 +133,13 @@ impl VistaMusica {
         let x = x + anchos.1 + hueco;
         lienzo.texto(&p.artista, tramo(x, anchos.2), ARTISTA_COMPACTO, GRIS_TEXTO, SIN_FORMATO_EXTRA);
         lienzo.quitar_recorte();
-        desborda
+        moviendose
     }
 
-    fn dibujar_progreso(&self, lienzo: &Lienzo, area: RECT, margen: i32) {
+    fn zona_progreso(&self, lienzo: &Lienzo, area: RECT) -> RECT {
         let e = lienzo.escala;
-        let (y, alto, largo) = (e.px(PROGRESO_Y), e.px(PROGRESO_ALTO), area.right - 2 * margen);
-        let pista = RECT { left: margen, top: y, right: margen + largo, bottom: y + alto };
-        lienzo.rect_lleno(pista, GRIS_BARRA, e.px(2));
-        let avance = (largo as f64 * self.pista.progreso()) as i32;
-        if avance > 0 {
-            lienzo.rect_lleno(RECT { right: margen + avance, ..pista }, BLANCO, e.px(2));
-        }
+        let (margen, y) = (e.px(MARGEN_EXPANDIDO), e.px(PROGRESO_Y));
+        RECT { left: margen, top: y, right: area.right - margen, bottom: y + e.px(PROGRESO_ALTO) }
     }
 
     fn dibujar_botones(&self, lienzo: &Lienzo, area: RECT) {
@@ -164,46 +161,76 @@ impl VistaMusica {
 }
 
 impl Vista for VistaMusica {
-    fn minimal(&self, lienzo: &Lienzo, area: RECT) {
-        let centro_x = (area.left + area.right) / 2;
-        self.dibujar_onda(lienzo, centro_x + lienzo.escala.px(ANCHO_ONDA) / 2, area.bottom / 2);
+    fn huella_estatica(&self, modo: Modo, area: RECT) -> u64 {
+        let p = &self.pista;
+        let mut hasher = DefaultHasher::new();
+        (modo, area.right, area.bottom).hash(&mut hasher);
+        (&p.titulo, &p.artista, p.reproduciendo).hash(&mut hasher);
+        p.portada.as_ref().map(|portada| Arc::as_ptr(portada) as usize).hash(&mut hasher);
+        hasher.finish()
     }
 
-    fn compacta(&self, lienzo: &Lienzo, area: RECT) -> bool {
+    fn pintar_estatico(&self, lienzo: &Lienzo, area: RECT, modo: Modo) {
         let e = lienzo.escala;
-        let (margen, lado) = (e.px(MARGEN_COMPACTO), e.px(PORTADA_COMPACTA));
-        let y = (area.bottom - lado) / 2;
-        let portada = RECT { left: margen, top: y, right: margen + lado, bottom: y + lado };
-        self.dibujar_portada(lienzo, portada, e.px(RADIO_PORTADA_COMPACTA), PORTADA_COMPACTA);
-        self.dibujar_onda(lienzo, area.right - margen, area.bottom / 2);
+        match modo {
+            Modo::Minimal => {} // solo la onda, que se mueve
+            Modo::Compacto => {
+                let (margen, lado) = (e.px(MARGEN_COMPACTO), e.px(PORTADA_COMPACTA));
+                let y = (area.bottom - lado) / 2;
+                let portada = RECT { left: margen, top: y, right: margen + lado, bottom: y + lado };
+                self.dibujar_portada(lienzo, portada, e.px(RADIO_PORTADA_COMPACTA), PORTADA_COMPACTA);
+            }
+            Modo::Expandido => {
+                let (margen, lado) = (e.px(MARGEN_EXPANDIDO), e.px(PORTADA_EXPANDIDA));
+                let portada = RECT { left: margen, top: margen, right: margen + lado, bottom: margen + lado };
+                self.dibujar_portada(lienzo, portada, e.px(RADIO_PORTADA_EXPANDIDA), PORTADA_EXPANDIDA);
 
-        let separacion = e.px(SEPARACION_COMPACTA);
-        let zona_texto = RECT {
-            left: margen + lado + separacion,
-            top: area.top,
-            right: area.right - margen - e.px(ANCHO_ONDA) - separacion,
-            bottom: area.bottom,
-        };
-        self.dibujar_titulo_artista_desplazable(lienzo, zona_texto)
+                let separacion = e.px(SEPARACION_EXPANDIDA);
+                let izquierda = margen + lado + separacion;
+                let derecha = area.right - margen - e.px(ANCHO_ONDA) - separacion;
+                let medio = margen + lado / 2;
+                let titulo = RECT { left: izquierda, top: margen, right: derecha, bottom: medio + e.px(2) };
+                let artista = RECT { left: izquierda, top: medio, right: derecha, bottom: margen + lado };
+                lienzo.texto(&self.pista.titulo, titulo, TITULO_EXPANDIDO, BLANCO, DT_END_ELLIPSIS);
+                lienzo.texto(&self.pista.artista, artista, ARTISTA_EXPANDIDO, GRIS_TEXTO, DT_END_ELLIPSIS);
+
+                lienzo.rect_lleno(self.zona_progreso(lienzo, area), GRIS_BARRA, e.px(2)); // el fondo de la barra
+                self.dibujar_botones(lienzo, area);
+            }
+        }
     }
 
-    fn expandida(&self, lienzo: &Lienzo, area: RECT) {
+    fn pintar_dinamico(&self, lienzo: &Lienzo, area: RECT, modo: Modo) -> bool {
         let e = lienzo.escala;
-        let (margen, lado) = (e.px(MARGEN_EXPANDIDO), e.px(PORTADA_EXPANDIDA));
-        let portada = RECT { left: margen, top: margen, right: margen + lado, bottom: margen + lado };
-        self.dibujar_portada(lienzo, portada, e.px(RADIO_PORTADA_EXPANDIDA), PORTADA_EXPANDIDA);
-        self.dibujar_onda(lienzo, area.right - margen, margen + lado / 2);
-
-        let separacion = e.px(SEPARACION_EXPANDIDA);
-        let (izquierda, derecha) = (margen + lado + separacion, area.right - margen - e.px(ANCHO_ONDA) - separacion);
-        let medio = margen + lado / 2;
-        let titulo = RECT { left: izquierda, top: margen, right: derecha, bottom: medio + e.px(2) };
-        let artista = RECT { left: izquierda, top: medio, right: derecha, bottom: margen + lado };
-        lienzo.texto(&self.pista.titulo, titulo, TITULO_EXPANDIDO, BLANCO, DT_END_ELLIPSIS);
-        lienzo.texto(&self.pista.artista, artista, ARTISTA_EXPANDIDO, GRIS_TEXTO, DT_END_ELLIPSIS);
-
-        self.dibujar_progreso(lienzo, area, margen);
-        self.dibujar_botones(lienzo, area);
+        match modo {
+            Modo::Minimal => {
+                let centro_x = (area.left + area.right) / 2;
+                self.dibujar_onda(lienzo, centro_x + e.px(ANCHO_ONDA) / 2, area.bottom / 2);
+                false
+            }
+            Modo::Compacto => {
+                let (margen, lado) = (e.px(MARGEN_COMPACTO), e.px(PORTADA_COMPACTA));
+                self.dibujar_onda(lienzo, area.right - margen, area.bottom / 2);
+                let separacion = e.px(SEPARACION_COMPACTA);
+                let zona_texto = RECT {
+                    left: margen + lado + separacion,
+                    top: area.top,
+                    right: area.right - margen - e.px(ANCHO_ONDA) - separacion,
+                    bottom: area.bottom,
+                };
+                self.dibujar_titulo_artista_desplazable(lienzo, zona_texto)
+            }
+            Modo::Expandido => {
+                let (margen, lado) = (e.px(MARGEN_EXPANDIDO), e.px(PORTADA_EXPANDIDA));
+                self.dibujar_onda(lienzo, area.right - margen, margen + lado / 2);
+                let pista = self.zona_progreso(lienzo, area);
+                let avance = ((pista.right - pista.left) as f64 * self.pista.progreso()) as i32;
+                if avance > 0 {
+                    lienzo.rect_lleno(RECT { right: pista.left + avance, ..pista }, BLANCO, e.px(2));
+                }
+                false
+            }
+        }
     }
 
     fn hay_boton_en(&self, punto: POINT, area: RECT, escala: Escala) -> bool {

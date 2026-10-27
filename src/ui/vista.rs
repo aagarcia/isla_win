@@ -1,19 +1,31 @@
 //! Contrato de una vista de la isla. La ventana solo conoce este trait: música hoy; batería, descarga
 //! o llamada mañana, cada una en su archivo, sin tocar la ventana.
+//!
+//! Cada vista separa lo que **no cambia** entre fotogramas (portada, textos, botones: capa estática, que se
+//! pinta una vez) de lo que **se mueve** (onda, progreso, texto desplazándose: se pinta en cada fotograma).
 
 use super::escala::Escala;
 use super::gdi::Lienzo;
 use super::vista_musica::VistaMusica;
 use windows::Win32::Foundation::{POINT, RECT};
 
+/// Los tres tamaños de la isla.
+#[derive(Clone, Copy, PartialEq, Hash)]
+pub enum Modo {
+    Minimal,
+    Compacto,
+    Expandido,
+}
+
 pub trait Vista {
-    /// Pinta el estado minimal: solo lo esencial (en música, la onda).
-    fn minimal(&self, lienzo: &Lienzo, area: RECT);
+    /// Huella de lo estático: mientras no cambie, no se repinta la capa estática.
+    fn huella_estatica(&self, modo: Modo, area: RECT) -> u64;
 
-    /// Pinta el estado compacto. Devuelve true si el contenido no cabe y se desplaza (necesita repintado).
-    fn compacta(&self, lienzo: &Lienzo, area: RECT) -> bool;
+    /// Pinta lo que no cambia entre fotogramas.
+    fn pintar_estatico(&self, lienzo: &Lienzo, area: RECT, modo: Modo);
 
-    fn expandida(&self, lienzo: &Lienzo, area: RECT);
+    /// Pinta lo que se mueve. Devuelve true si el contenido sigue en movimiento (p. ej. un título desplazándose).
+    fn pintar_dinamico(&self, lienzo: &Lienzo, area: RECT, modo: Modo) -> bool;
 
     /// ¿Hay un botón bajo `punto` en el estado expandido?
     fn hay_boton_en(&self, punto: POINT, area: RECT, escala: Escala) -> bool;
@@ -21,7 +33,7 @@ pub trait Vista {
     /// Atiende un clic en el estado expandido. Devuelve true si pulsó un botón.
     fn pulsar(&self, punto: POINT, area: RECT, escala: Escala) -> bool;
 
-    /// ¿Tiene algo en movimiento (onda, progreso) que exija repintar?
+    /// ¿Tiene algo en movimiento permanente (onda) que exija repintar?
     fn animando(&self) -> bool;
 }
 

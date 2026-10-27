@@ -70,7 +70,7 @@ src/
     ├── ventana.rs     ventana: tamaño, forma, temporizador, reacción a mensajes
     ├── vista.rs       trait Vista (contrato) y `activa()` (qué vista mostrar)
     ├── vista_musica.rs  la vista de música (compacta y expandida)
-    ├── gdi.rs         primitivas de dibujo (todo el `unsafe` del dibujo está aquí)
+    ├── gdi.rs         primitivas de dibujo, fuentes cacheadas y pintado por capas (todo el `unsafe` del dibujo)
     ├── iconos.rs      iconos de control
     ├── bandeja.rs     icono junto al reloj, su menú y su icono dibujado en código
     ├── gancho.rs      gancho de ratón para el clic fuera
@@ -118,26 +118,51 @@ Decisiones que mantienen el consumo bajo:
 cargo test
 ```
 
-28 pruebas sobre el dominio, la escala y el icono: progreso, desplazamiento del título, colores de marca y
+29 pruebas sobre el dominio, la escala y el icono: progreso, desplazamiento del título, colores de marca y
 dominante, visibilidad por inactividad, preferencias, órdenes del menú, píxeles del icono, escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
 
 ## Mediciones (orientativas, no un benchmark)
 
-Equipo del autor, pantalla 1536×864 al 125 %, Spotify sonando:
+Equipo del autor (8 núcleos lógicos), pantalla 1536×864 al 125 %, Spotify sonando. Arranque limpio; cada fila
+es una ventana de 15 s tras 3 s de asentamiento. "% de 1 núcleo": 100 % sería un núcleo entero.
 
-| Situación | RAM | Memoria privada | CPU |
+| Estado | CPU antes | CPU ahora | RAM / privada ahora |
 |---|---|---|---|
-| Reposo, sin música | ~16 MB | ~2 MB | ~0 % |
-| Compact, sonando, título desplazándose | ~17–18 MB | ~2,6 MB | ~1 % de un núcleo |
-| Expanded, sonando | ~21 MB | ~3 MB | ~1,6 % de un núcleo (0,08 s en 5 s) |
+| Compact, sonando | 1,35 % | **0,83 %** | 22,1 MB / 3,1 MB |
+| Minimal, sonando | 0,52 % | **0,42 %** | 22,1 MB / 3,1 MB |
+| Expanded, sonando | 1,35 % | **0,21 %** | 22,3 MB / 3,2 MB |
 
-El `.exe` pesa ~142 KB.
+- **Qué se optimizó** (ver "Rendimiento" abajo): fuentes cacheadas, capa estática cacheada, superficies
+  reutilizadas, 15 fps y desplazamiento acotado. El Expanded baja un ~84 %.
+- **Sin fugas**: objetos GDI acotados (21: dos superficies y las fuentes cacheadas, no crecen al cambiar de
+  estado) y RAM estable (22,1 → 22,3 MB en un minuto).
+- La **memoria privada (~3 MB)** es lo que la isla aporta de verdad; el working set incluye páginas compartidas
+  de DLL de Windows. Como referencia, Spotify usa ~630 MB entre todos sus procesos.
+- Medido antes de optimizar, tras horas abierta: 27,7 MB de RAM (privada 3,6 MB). Sigue pendiente comprobar si
+  el working set crece con las horas de uso.
+- `.exe`: ~180 KB.
+- Oculta por inactividad (en pausa): 0,000 % de CPU (medido antes de la bandeja). El estado "pausada, visible"
+  **no se ha medido bien** (la tecla de pausa no llegó a pausar); pendiente.
+
+## Rendimiento: reglas para que no se degrade al crecer
+
+- **Nada se crea en cada fotograma**: las fuentes GDI se cachean por (tamaño, peso) y las dos superficies en
+  memoria se reutilizan mientras no cambie el tamaño.
+- **Capa estática**: cada `Vista` separa lo que no cambia (portada, textos, botones) de lo que se mueve (onda,
+  progreso, título desplazándose). La capa estática se pinta una vez y se copia; solo se repinta si cambia su
+  huella (canción, tamaño, play/pausa, portada). Una vista nueva debe respetar esta separación.
+- **Animación acotada**: ~15 fps (66 ms) y el título largo se desplaza 2 ciclos y se queda quieto; el
+  temporizador se apaga cuando nada se mueve.
+- **Estado compartido sin copias**: `estado::pista()` devuelve un `Arc`; leerla no copia textos ni portada.
+- **Nada se acumula con el uso**: cada canción nueva invalida el reintento de portada anterior (un solo hilo
+  vigente) y al cambiar de sesión SMTC se des-suscriben los manejadores previos (un evento = una lectura).
+- Ideas pendientes si hiciera falta: ocultar la ventana de repintado cuando la onda no cambia visualmente y
+  agrupar los eventos de línea de tiempo de SMTC (llegan con frecuencia).
 
 ## Atajos conocidos
 
 - Bordes sin antialiasing y sin las curvas inversas del mockup: es GDI con `SetWindowRgn`. Si se adopta,
   pasar a DirectComposition.
-- Las suscripciones SMTC se acumulan cuando cambia la sesión actual; des-suscribir si se adopta.
 - Sin transición suave al expandir/compactar ni al cambiar de canción: el tamaño cambia de golpe.
 - Las preferencias (tamaño en reposo, ocultar) viven en memoria: se pierden al cerrar. Tampoco hay arranque
   con Windows todavía.

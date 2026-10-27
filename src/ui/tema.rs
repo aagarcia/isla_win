@@ -23,7 +23,7 @@ pub const GRIS_BARRA: Rgb = Rgb(70, 70, 70);
 pub const GRIS_SIN_PORTADA: Rgb = Rgb(48, 48, 56);
 pub const GRIS_NOTA: Rgb = Rgb(150, 150, 160);
 
-/// Intervalo de repintado mientras algo se anima (ms).
-pub const INTERVALO_ANIMACION_MS: u32 = 50;
+/// Intervalo de repintado mientras algo se anima (ms): ~15 fotogramas por segundo bastan para la onda.
+pub const INTERVALO_ANIMACION_MS: u32 = 66;
 /// Velocidad del desplazamiento del título largo (px/s a 96 dpi).
 pub const VELOCIDAD_DESPLAZAMIENTO: i32 = 30;
