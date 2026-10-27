@@ -40,10 +40,43 @@ Cierra la isla antes de recompilar: Windows no deja reemplazar un `.exe` en uso.
 
 ## Arquitectura
 
-- `src/main.rs`: ventana (siempre encima, sin foco, fuera de Alt-Tab, DPI por monitor), dibujo GDI con
-  doble búfer, clics y temporizador.
-- `src/media.rs`: lectura y control de la sesión multimedia con SMTC
-  (`GlobalSystemMediaTransportControls`). Guarda la pista en `PISTA` y avisa a la ventana con `WM_APP`.
+Capas: cada una solo conoce a las de abajo, y la interfaz nunca conoce a SMTC.
+
+```
+src/
+├── main.rs            arranque: DPI, WinRT, ventana, SMTC, bucle de mensajes
+├── dominio/           reglas puras, sin Windows (se prueban con `cargo test`)
+│   ├── pista.rs       Pista, Portada, progreso
+│   ├── color.rs       color de marca por app y color dominante de la portada
+│   ├── animacion.rs   desplazamiento del título y fase de la onda
+│   └── control.rs     Accion y el trait ControlMedios
+├── estado.rs          lo que suena + el control: único punto de contacto ui ↔ smtc
+├── smtc/              origen de datos (sesión multimedia de Windows)
+│   ├── mod.rs         vigila eventos, notifica con un callback, implementa ControlMedios
+│   ├── lectura.rs     sesión SMTC → Pista
+│   └── portada.rs     lectura de la portada con reintentos y descarte de la anterior
+└── ui/
+    ├── ventana.rs     ventana: tamaño, forma, temporizador, reacción a mensajes
+    ├── vista.rs       trait Vista (contrato) y `activa()` (qué vista mostrar)
+    ├── vista_musica.rs  la vista de música (compacta y expandida)
+    ├── gdi.rs         primitivas de dibujo (todo el `unsafe` del dibujo está aquí)
+    ├── iconos.rs      iconos de control
+    ├── gancho.rs      gancho de ratón para el clic fuera
+    ├── tema.rs        medidas y colores
+    └── escala.rs      escala por DPI
+```
+
+Principios aplicados:
+
+- **Una responsabilidad por módulo**: la ventana decide tamaño y repintado; la vista decide qué dibujar; `gdi`
+  solo sabe dibujar; `smtc` solo sabe leer Windows.
+- **Abierto a extensión**: una vista nueva (batería, descarga, llamada) es un archivo que implementa `Vista` y se
+  elige en `vista::activa()`, sin tocar la ventana. Una marca nueva de color es una línea en `MARCAS`.
+- **Dependencias hacia el dominio**: `ui` y `smtc` dependen de `dominio`; `smtc` avisa a la interfaz con un
+  callback que le pasa `main`, no importa nada de `ui`. La interfaz da órdenes al reproductor por el trait
+  `ControlMedios`, no por SMTC.
+- **Sin números mágicos**: medidas, colores y tiempos tienen nombre (`tema.rs` y las constantes de cada vista).
+- **`unsafe` acotado**: los wrappers (`Lienzo`, `gancho`) lo encapsulan; las vistas no lo usan.
 
 Decisiones que mantienen el consumo bajo:
 
@@ -56,18 +89,25 @@ Decisiones que mantienen el consumo bajo:
   cada 15–30 s hasta ~2 min (un hilo que termina al tenerla). Spotify a veces tarda más de 14 s en publicarla
   (medido: `Thumbnail()` nulo todo ese tiempo). Mientras tanto se muestra un relleno gris con una nota,
   nunca la portada equivocada.
-- **Texto del Compact**: `título · artista` en tres tramos (título blanco en negrita, punto de acento,
-  artista gris), dibujados uno tras otro para que se desplacen juntos.
-- **Color de acento** (wave y punto): sale del `SourceAppUserModelId` de la sesión SMTC con una tabla de marcas
+- **Color de acento** (onda y punto): sale del `SourceAppUserModelId` de la sesión con una tabla de marcas
   (Spotify verde, Apple Music, Reproductor de Windows, VLC, YouTube, Deezer, Amazon Music). Si la app no está
-  en la tabla (p. ej. un navegador) se usa el color dominante de la portada, avivado para que se vea sobre el
-  negro; si no hay ninguno, rosa. Para añadir una marca basta una línea en `color_marca` (`media.rs`).
-- **Cursor**: la clase de ventana lleva la flecha (sin cursor de clase Windows deja el de "ocupado", el círculo
-  azul) y `WM_SETCURSOR` pone la manita sobre la isla compacta y los botones del Expanded.
+  (p. ej. un navegador) se usa el color dominante de la portada, avivado para que se vea sobre el negro; si no
+  hay ninguno, rosa.
 - **Clic fuera de la isla**: la ventana no tiene el foco (para no robárselo a otras apps), así que no ve esos
   clics. Mientras está expandida hay un gancho de ratón global (`WH_MOUSE_LL`) que solo avisa de los clics
   fuera de la ventana para compactarla; no consume clics y se quita al compactar.
+- **Cursor**: la clase de ventana lleva la flecha (sin cursor de clase Windows deja el de "ocupado", el círculo
+  azul) y `WM_SETCURSOR` pone la manita sobre la isla compacta y los botones del Expanded.
 - Binario sin runtime: Rust + `windows-rs`, perfil `release` optimizado en tamaño.
+
+## Pruebas
+
+```powershell
+cargo test
+```
+
+15 pruebas sobre el dominio y la escala: progreso, desplazamiento del título, colores de marca y dominante,
+escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
 
 ## Mediciones (orientativas, no un benchmark)
 
