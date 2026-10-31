@@ -20,14 +20,14 @@ pub fn dibujar(lienzo: &Lienzo, icono: Icono, cx: i32, cy: i32, medio: i32, colo
     match icono {
         Icono::Anterior => {
             lienzo.rect_lleno(barra(cx - s, cx - s + s / 3), color, 0);
-            lienzo.poligono(&[punto(cx + s, cy - s), punto(cx + s, cy + s), punto(cx - s + s / 2, cy)], color);
+            lienzo.poligono_suave(&[punto(cx + s, cy - s), punto(cx + s, cy + s), punto(cx - s + s / 2, cy)], color);
         }
         Icono::Siguiente => {
             lienzo.rect_lleno(barra(cx + s - s / 3, cx + s), color, 0);
-            lienzo.poligono(&[punto(cx - s, cy - s), punto(cx - s, cy + s), punto(cx + s - s / 2, cy)], color);
+            lienzo.poligono_suave(&[punto(cx - s, cy - s), punto(cx - s, cy + s), punto(cx + s - s / 2, cy)], color);
         }
         Icono::Play => {
-            lienzo.poligono(&[punto(cx - s * 2 / 3, cy - s), punto(cx - s * 2 / 3, cy + s), punto(cx + s, cy)], color);
+            lienzo.poligono_suave(&[punto(cx - s * 2 / 3, cy - s), punto(cx - s * 2 / 3, cy + s), punto(cx + s, cy)], color);
         }
         Icono::Pausa => {
             let (ancho, hueco) = (s * 2 / 3, s / 2);

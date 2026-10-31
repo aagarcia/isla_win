@@ -10,9 +10,12 @@ use crate::dominio::pista::Portada;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::c_void;
+use std::ptr::null_mut;
+use std::sync::OnceLock;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{COLORREF, POINT, RECT};
 use windows::Win32::Graphics::Gdi::*;
+use windows::Win32::Graphics::GdiPlus::{self as gp, GpBrush, GpGraphics, GpSolidFill};
 
 #[derive(Clone, Copy)]
 pub struct Fuente {
@@ -55,6 +58,52 @@ impl Lienzo {
         self.con_pincel(color, || unsafe {
             let _ = Polygon(self.hdc, puntos);
         });
+    }
+
+    /// Polígono con bordes suavizados (GDI+); si GDI+ no arranca, cae al polígono de GDI.
+    pub fn poligono_suave(&self, puntos: &[POINT], color: Rgb) {
+        let puntos_gp: Vec<gp::Point> = puntos.iter().map(|p| gp::Point { X: p.x, Y: p.y }).collect();
+        let pintado = self.con_gdiplus(color, |graficos, pincel| unsafe {
+            gp::GdipFillPolygonI(graficos, pincel, puntos_gp.as_ptr(), puntos_gp.len() as i32, gp::FillModeAlternate);
+        });
+        if !pintado {
+            self.poligono(puntos, color);
+        }
+    }
+
+    /// Círculo (o elipse) inscrito en `zona`, con bordes suavizados; sin GDI+ cae al redondeo de GDI.
+    pub fn circulo_suave(&self, zona: RECT, color: Rgb) {
+        // misma extensión que `rect_lleno`: incluye el borde derecho e inferior
+        let (ancho, alto) = (zona.right - zona.left + 1, zona.bottom - zona.top + 1);
+        let pintado = self.con_gdiplus(color, |graficos, pincel| unsafe {
+            gp::GdipFillEllipseI(graficos, pincel, zona.left, zona.top, ancho, alto);
+        });
+        if !pintado {
+            self.rect_lleno(zona, color, (zona.right - zona.left) / 2);
+        }
+    }
+
+    /// Dibuja con GDI+ sobre este lienzo. Devuelve false si GDI+ no está disponible.
+    fn con_gdiplus(&self, Rgb(r, g, b): Rgb, dibujar: impl FnOnce(*mut GpGraphics, *mut GpBrush)) -> bool {
+        if !gdiplus_listo() {
+            return false;
+        }
+        unsafe {
+            let mut graficos: *mut GpGraphics = null_mut();
+            if gp::GdipCreateFromHDC(self.hdc, &mut graficos) != gp::Ok {
+                return false;
+            }
+            gp::GdipSetSmoothingMode(graficos, gp::SmoothingModeAntiAlias);
+            let mut relleno: *mut GpSolidFill = null_mut();
+            let opaco = 0xFF00_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
+            let creado = gp::GdipCreateSolidFill(opaco, &mut relleno) == gp::Ok;
+            if creado {
+                dibujar(graficos, relleno as *mut GpBrush);
+                gp::GdipDeleteBrush(relleno as *mut GpBrush);
+            }
+            gp::GdipDeleteGraphics(graficos);
+            creado
+        }
     }
 
     /// Dibuja `texto` en una línea dentro de `zona`, centrado en vertical.
@@ -154,6 +203,16 @@ fn fuente_cacheada(alto: i32, peso: i32) -> HFONT {
                 CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, 0, PCWSTR(nombre.as_ptr()),
             )
         })
+    })
+}
+
+/// Arranca GDI+ la primera vez que se pide (solo hace falta al pintar los botones del estado expandido).
+fn gdiplus_listo() -> bool {
+    static LISTO: OnceLock<bool> = OnceLock::new();
+    *LISTO.get_or_init(|| unsafe {
+        let mut token = 0usize;
+        let entrada = gp::GdiplusStartupInput { GdiplusVersion: 1, ..Default::default() };
+        gp::GdiplusStartup(&mut token, &entrada, null_mut()) == gp::Ok
     })
 }
 

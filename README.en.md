@@ -77,7 +77,7 @@ src/
     ├── ventana.rs     window: size, shape, timer, message handling
     ├── vista.rs       View trait (contract) and `activa()` (which view to show)
     ├── vista_musica.rs  the music view (compact and expanded)
-    ├── gdi.rs         drawing primitives, cached fonts and layered painting (all the drawing `unsafe`)
+    ├── gdi.rs         drawing primitives (GDI and GDI+), cached fonts and layered painting (all the drawing `unsafe`)
     ├── iconos.rs      control icons
     ├── bandeja.rs     tray icon, its menu and its code-drawn icon
     ├── textos.rs      UI texts in Spanish and English; language taken from Windows
@@ -171,7 +171,12 @@ Author's machine (8 logical cores), 1536×864 screen at 125 %, Spotify playing. 
 
 ## Known shortcuts
 
-- Edges without antialiasing and without the mockup's inverse curves: it is GDI with `SetWindowRgn`. If
+- **Buttons smoothed with GDI+**: the triangles and the play/pause circle use antialiased GDI+
+  (`poligono_suave`, `circulo_suave`); GDI+ starts the first time they are painted, on expanding, and if it
+  fails it falls back to GDI drawing. Measured cost in Expanded: ~+0.7 MB of RAM and no clear CPU difference
+  against the noise (0.1–1.3 % of one core between runs). If it grew, the alternative is to paint the
+  buttons once at a larger size and scale them down.
+- Island edges without antialiasing and without the mockup's inverse curves: it is GDI with `SetWindowRgn`. If
   adopted, move to DirectComposition.
 - No smooth transition when expanding/compacting or changing song: the size changes at once.
 - Preferences (resting size, hide) live in memory: they are lost on close. There is no start with Windows

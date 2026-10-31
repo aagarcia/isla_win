@@ -154,7 +154,7 @@ impl VistaMusica {
         iconos::dibujar(lienzo, Icono::Siguiente, cx, cy, e.px(ICONO_MEDIO), BLANCO);
 
         // play/pausa: círculo blanco con el icono en negro
-        lienzo.rect_lleno(central, BLANCO, (central.right - central.left) / 2);
+        lienzo.circulo_suave(central, BLANCO);
         let icono = if self.pista.reproduciendo { Icono::Pausa } else { Icono::Play };
         let (cx, cy) = centro(central);
         iconos::dibujar(lienzo, icono, cx, cy, e.px(ICONO_CENTRAL_MEDIO), NEGRO);

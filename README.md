@@ -78,7 +78,7 @@ src/
     ├── ventana.rs     ventana: tamaño, forma, temporizador, reacción a mensajes
     ├── vista.rs       trait Vista (contrato) y `activa()` (qué vista mostrar)
     ├── vista_musica.rs  la vista de música (compacta y expandida)
-    ├── gdi.rs         primitivas de dibujo, fuentes cacheadas y pintado por capas (todo el `unsafe` del dibujo)
+    ├── gdi.rs         primitivas de dibujo (GDI y GDI+), fuentes cacheadas y pintado por capas (todo el `unsafe` del dibujo)
     ├── iconos.rs      iconos de control
     ├── bandeja.rs     icono junto al reloj, su menú y su icono dibujado en código
     ├── textos.rs      textos de la interfaz en español e inglés; idioma tomado de Windows
@@ -171,7 +171,12 @@ es una ventana de 15 s tras 3 s de asentamiento. "% de 1 núcleo": 100 % sería 
 
 ## Atajos conocidos
 
-- Bordes sin antialiasing y sin las curvas inversas del mockup: es GDI con `SetWindowRgn`. Si se adopta,
+- **Botones suavizados con GDI+**: los triángulos y el círculo del play/pausa usan GDI+ con antialiasing
+  (`poligono_suave`, `circulo_suave`); GDI+ arranca la primera vez que se pintan, al expandir, y si falla se
+  cae al dibujo de GDI. Coste medido en Expanded: ~+0,7 MB de RAM y CPU sin diferencia clara frente al ruido
+  (0,1–1,3 % de un núcleo entre ejecuciones). Si creciera, la alternativa es pintar los botones a mayor
+  tamaño una vez y reducirlos.
+- Bordes de la isla sin antialiasing y sin las curvas inversas del mockup: es GDI con `SetWindowRgn`. Si se adopta,
   pasar a DirectComposition.
 - Sin transición suave al expandir/compactar ni al cambiar de canción: el tamaño cambia de golpe.
 - Las preferencias (tamaño en reposo, ocultar) viven en memoria: se pierden al cerrar. Tampoco hay arranque
