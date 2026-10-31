@@ -1,6 +1,7 @@
 //! Icono junto al reloj (área de notificación) y su menú: ocultar/mostrar, tamaño en reposo y cerrar.
 //! No decide nada: traduce los clics del usuario a `Orden` y la ventana las ejecuta.
 
+use super::textos::{ancho, actuales};
 use crate::dominio::preferencias::{Preferencias, Reposo};
 use std::ffi::c_void;
 use windows::core::{w, PCWSTR};
@@ -69,16 +70,17 @@ fn datos(ventana: HWND) -> NOTIFYICONDATAW {
 pub fn mostrar_menu(ventana: HWND, preferencias: &Preferencias) {
     unsafe {
         let Ok(menu) = CreatePopupMenu() else { return };
-        let alternar = if preferencias.oculta_por_usuario { w!("Mostrar isla") } else { w!("Ocultar isla") };
-        let _ = AppendMenuW(menu, MF_STRING, ID_ALTERNAR, alternar);
+        let textos = actuales();
+        let alternar = ancho(if preferencias.oculta_por_usuario { textos.mostrar } else { textos.ocultar });
+        let _ = AppendMenuW(menu, MF_STRING, ID_ALTERNAR, PCWSTR(alternar.as_ptr()));
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-        let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, w!("Tamaño en reposo"));
+        let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, PCWSTR(ancho(textos.reposo).as_ptr()));
         let _ = AppendMenuW(menu, MF_STRING, ID_MINIMAL, w!("Minimal"));
         let _ = AppendMenuW(menu, MF_STRING, ID_COMPACT, w!("Compact"));
         let marcado = if preferencias.reposo == Reposo::Minimal { ID_MINIMAL } else { ID_COMPACT };
         let _ = CheckMenuRadioItem(menu, ID_MINIMAL as u32, ID_COMPACT as u32, marcado as u32, MF_BYCOMMAND.0);
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-        let _ = AppendMenuW(menu, MF_STRING, ID_CERRAR, w!("Cerrar"));
+        let _ = AppendMenuW(menu, MF_STRING, ID_CERRAR, PCWSTR(ancho(textos.cerrar).as_ptr()));
 
         let mut cursor = POINT::default();
         let _ = GetCursorPos(&mut cursor);

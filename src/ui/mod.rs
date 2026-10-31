@@ -6,6 +6,7 @@ mod gancho;
 mod gdi;
 mod iconos;
 mod tema;
+mod textos;
 mod vista;
 mod vista_musica;
 pub mod ventana;

@@ -1,5 +1,7 @@
 # isla_win
 
+**Español** · [English](README.en.md)
+
 Isla estilo "Dynamic Island" para portátiles Windows cuya cámara está en el **marco**, no en la pantalla.
 Una ventana pegada al borde superior, centrada, que muestra lo que suena (Spotify, navegadores…) y se
 expande para controlarlo.
@@ -18,7 +20,8 @@ expande para controlarlo.
 | Minimal de música (solo la onda) | Hecho (sin verificar visualmente) |
 | Minimal, batería, llamada, descarga, temporizador | Pendiente (ver mockup) |
 | Ocultarse con apps a pantalla completa | Pendiente |
-| Icono de bandeja (salir, configuración, arranque con Windows) | Pendiente |
+| Icono de bandeja (configuración, arranque con Windows) | Pendiente |
+| Interfaz en español / inglés (sigue el idioma de Windows) | Hecho |
 
 ## Uso
 
@@ -34,6 +37,9 @@ expande para controlarlo.
   compactar vuelve al tamaño elegido.
 - **Ocultar a mano** es independiente de lo anterior: oculta aunque suene música, hasta que la muestres de nuevo
   (si no suena nada, "Mostrar" no la hace aparecer: sigue mandando la regla de los 3 minutos).
+
+- **Idioma**: el menú sale en español si Windows está en español y en inglés en cualquier otro caso. Se elige
+  una vez al arrancar; no hay selector manual.
 
 ## Requisitos para compilar
 
@@ -73,6 +79,7 @@ src/
     ├── gdi.rs         primitivas de dibujo, fuentes cacheadas y pintado por capas (todo el `unsafe` del dibujo)
     ├── iconos.rs      iconos de control
     ├── bandeja.rs     icono junto al reloj, su menú y su icono dibujado en código
+    ├── textos.rs      textos de la interfaz en español e inglés; idioma tomado de Windows
     ├── gancho.rs      gancho de ratón para el clic fuera
     ├── tema.rs        medidas y colores
     └── escala.rs      escala por DPI
@@ -118,8 +125,8 @@ Decisiones que mantienen el consumo bajo:
 cargo test
 ```
 
-29 pruebas sobre el dominio, la escala y el icono: progreso, desplazamiento del título, colores de marca y
-dominante, visibilidad por inactividad, preferencias, órdenes del menú, píxeles del icono, escala por DPI. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
+33 pruebas sobre el dominio, la escala, el icono y los textos: progreso, desplazamiento del título, colores de marca y
+dominante, visibilidad por inactividad, preferencias, órdenes del menú, píxeles del icono, escala por DPI, elección de idioma. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
 
 ## Mediciones (orientativas, no un benchmark)
 
@@ -168,6 +175,7 @@ es una ventana de 15 s tras 3 s de asentamiento. "% de 1 núcleo": 100 % sería 
   con Windows todavía.
 - Si el Explorador se reinicia, el icono de la bandeja no se vuelve a crear (falta escuchar `TaskbarCreated`).
 - Posición única: centrada en la pantalla principal (`SM_CXSCREEN`); sin selector de monitor.
+- El idioma solo se elige al arrancar y sigue a Windows; no hay selector manual.
 - No se probó en un portátil con la cámara real ni con pantalla LCD vs OLED (el negro puede no coincidir
   con el marco).
 
