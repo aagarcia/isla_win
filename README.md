@@ -33,13 +33,13 @@ expande para controlarlo.
   (p. ej. cerraste Spotify) se oculta al instante, porque no hay nada que mostrar.
 - **Icono de la bandeja** (junto al reloj; en Windows 11 puede quedar en el menú `^` de iconos ocultos):
   clic izquierdo = ocultar/mostrar; clic derecho = menú con **Ocultar/Mostrar isla**, **Tamaño en reposo**
-  (Minimal o Compact) y **Cerrar**. El Expanded no se elige: se abre con un clic desde Minimal o Compact y al
+  (Minimal o Compact), **Idioma** (Español / English) y **Cerrar**. El Expanded no se elige: se abre con un clic desde Minimal o Compact y al
   compactar vuelve al tamaño elegido.
 - **Ocultar a mano** es independiente de lo anterior: oculta aunque suene música, hasta que la muestres de nuevo
   (si no suena nada, "Mostrar" no la hace aparecer: sigue mandando la regla de los 3 minutos).
 
-- **Idioma**: el menú sale en español si Windows está en español y en inglés en cualquier otro caso. Se elige
-  una vez al arrancar; no hay selector manual.
+- **Idioma**: al arrancar, español si Windows está en español e inglés en cualquier otro caso. Se cambia
+  desde el menú de la bandeja (**Idioma**); la elección vive en memoria y se pierde al cerrar.
 
 ## Requisitos para compilar
 
@@ -125,7 +125,7 @@ Decisiones que mantienen el consumo bajo:
 cargo test
 ```
 
-33 pruebas sobre el dominio, la escala, el icono y los textos: progreso, desplazamiento del título, colores de marca y
+34 pruebas sobre el dominio, la escala, el icono y los textos: progreso, desplazamiento del título, colores de marca y
 dominante, visibilidad por inactividad, preferencias, órdenes del menú, píxeles del icono, escala por DPI, elección de idioma. Lo que toca Windows (ventana, SMTC, dibujo) se verifica a mano con capturas.
 
 ## Mediciones (orientativas, no un benchmark)
@@ -175,7 +175,6 @@ es una ventana de 15 s tras 3 s de asentamiento. "% de 1 núcleo": 100 % sería 
   con Windows todavía.
 - Si el Explorador se reinicia, el icono de la bandeja no se vuelve a crear (falta escuchar `TaskbarCreated`).
 - Posición única: centrada en la pantalla principal (`SM_CXSCREEN`); sin selector de monitor.
-- El idioma solo se elige al arrancar y sigue a Windows; no hay selector manual.
 - No se probó en un portátil con la cámara real ni con pantalla LCD vs OLED (el negro puede no coincidir
   con el marco).
 

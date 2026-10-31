@@ -1,7 +1,7 @@
 //! Icono junto al reloj (área de notificación) y su menú: ocultar/mostrar, tamaño en reposo y cerrar.
 //! No decide nada: traduce los clics del usuario a `Orden` y la ventana las ejecuta.
 
-use super::textos::{ancho, actuales};
+use super::textos::{actuales, ancho, idioma, Idioma};
 use crate::dominio::preferencias::{Preferencias, Reposo};
 use std::ffi::c_void;
 use windows::core::{w, PCWSTR};
@@ -20,6 +20,7 @@ const TEXTO_AYUDA: &str = "Isla";
 pub enum Orden {
     AlternarVisibilidad,
     Reposo(Reposo),
+    Idioma(Idioma),
     Cerrar,
 }
 
@@ -27,6 +28,8 @@ const ID_ALTERNAR: usize = 1;
 const ID_MINIMAL: usize = 2;
 const ID_COMPACT: usize = 3;
 const ID_CERRAR: usize = 4;
+const ID_ESPANOL: usize = 5;
+const ID_INGLES: usize = 6;
 
 impl Orden {
     /// Orden asociada al identificador de un elemento del menú.
@@ -35,6 +38,8 @@ impl Orden {
             ID_ALTERNAR => Some(Self::AlternarVisibilidad),
             ID_MINIMAL => Some(Self::Reposo(Reposo::Minimal)),
             ID_COMPACT => Some(Self::Reposo(Reposo::Compact)),
+            ID_ESPANOL => Some(Self::Idioma(Idioma::Es)),
+            ID_INGLES => Some(Self::Idioma(Idioma::En)),
             ID_CERRAR => Some(Self::Cerrar),
             _ => None,
         }
@@ -79,6 +84,13 @@ pub fn mostrar_menu(ventana: HWND, preferencias: &Preferencias) {
         let _ = AppendMenuW(menu, MF_STRING, ID_COMPACT, w!("Compact"));
         let marcado = if preferencias.reposo == Reposo::Minimal { ID_MINIMAL } else { ID_COMPACT };
         let _ = CheckMenuRadioItem(menu, ID_MINIMAL as u32, ID_COMPACT as u32, marcado as u32, MF_BYCOMMAND.0);
+        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let _ = AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, PCWSTR(ancho(textos.idioma).as_ptr()));
+        // cada idioma con su propio nombre, para poder volver a encontrarlo si el menú quedó en otro
+        let _ = AppendMenuW(menu, MF_STRING, ID_ESPANOL, w!("Español"));
+        let _ = AppendMenuW(menu, MF_STRING, ID_INGLES, w!("English"));
+        let marcado = if idioma() == Idioma::Es { ID_ESPANOL } else { ID_INGLES };
+        let _ = CheckMenuRadioItem(menu, ID_ESPANOL as u32, ID_INGLES as u32, marcado as u32, MF_BYCOMMAND.0);
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING, ID_CERRAR, PCWSTR(ancho(textos.cerrar).as_ptr()));
 
@@ -183,6 +195,8 @@ mod pruebas {
         assert_eq!(Orden::desde_id(ID_ALTERNAR), Some(Orden::AlternarVisibilidad));
         assert_eq!(Orden::desde_id(ID_MINIMAL), Some(Orden::Reposo(Reposo::Minimal)));
         assert_eq!(Orden::desde_id(ID_COMPACT), Some(Orden::Reposo(Reposo::Compact)));
+        assert_eq!(Orden::desde_id(ID_ESPANOL), Some(Orden::Idioma(Idioma::Es)));
+        assert_eq!(Orden::desde_id(ID_INGLES), Some(Orden::Idioma(Idioma::En)));
         assert_eq!(Orden::desde_id(ID_CERRAR), Some(Orden::Cerrar));
         assert_eq!(Orden::desde_id(99), None);
     }

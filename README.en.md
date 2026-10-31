@@ -33,12 +33,12 @@ to control it.
   (e.g. you closed Spotify) it hides immediately, since there is nothing to show.
 - **Tray icon** (next to the clock; on Windows 11 it may sit in the hidden-icons `^` menu):
   left click = hide/show; right click = menu with **Hide/Show island**, **Resting size**
-  (Minimal or Compact) and **Close**. Expanded is not a choice: it opens with a click from Minimal or Compact
+  (Minimal or Compact), **Language** (Español / English) and **Close**. Expanded is not a choice: it opens with a click from Minimal or Compact
   and returns to the chosen size when compacted.
 - **Hiding by hand** is independent of the above: it hides even while music plays, until you show it again
   (if nothing is playing, "Show" does not make it appear: the 3-minute rule still applies).
-- **Language**: the menu uses Spanish if Windows' display language is Spanish, English otherwise. It is
-  chosen once at startup; there is no manual selector.
+- **Language**: at startup, Spanish if Windows' display language is Spanish, English otherwise. Change it
+  from the tray menu (**Language**); the choice lives in memory and is lost on close.
 
 ## Build requirements
 
@@ -124,7 +124,7 @@ Decisions that keep consumption low:
 cargo test
 ```
 
-33 tests on the domain, scale, icon and texts: progress, title scrolling, brand and dominant colors,
+34 tests on the domain, scale, icon and texts: progress, title scrolling, brand and dominant colors,
 visibility on inactivity, preferences, menu commands, icon pixels, DPI scaling, language selection. Whatever
 touches Windows (window, SMTC, drawing) is verified by hand with screenshots.
 
@@ -175,7 +175,6 @@ Author's machine (8 logical cores), 1536×864 screen at 125 %, Spotify playing. 
   yet either.
 - If Explorer restarts, the tray icon is not recreated (we don't listen for `TaskbarCreated`).
 - Single position: centered on the primary screen (`SM_CXSCREEN`); no monitor selector.
-- The language is only chosen at startup and follows Windows; no manual selector.
 - Not tested on a laptop with the real camera, nor on LCD vs OLED (the black may not match the bezel).
 
 ## Platform limits (affect future content)

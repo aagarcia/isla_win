@@ -190,6 +190,8 @@ unsafe fn ejecutar(ventana: HWND, orden: Orden) {
                 let _ = InvalidateRect(Some(ventana), None, false);
                 ajustar_temporizador(ventana);
             }
+            // el menú se construye en cada apertura: basta con guardar la elección
+            Orden::Idioma(idioma) => super::textos::fijar(idioma),
             Orden::Cerrar => {
                 let _ = DestroyWindow(ventana);
             }
