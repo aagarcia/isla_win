@@ -28,6 +28,8 @@ expande para controlarlo.
 - Suena algo en Windows → la isla aparece sola (también en pausa).
 - **Clic** en la isla → se expande. En el Expanded, los botones controlan la reproducción; un **clic en
   cualquier otra zona de la isla, o en cualquier lugar fuera de ella**, la vuelve a compactar.
+- **Globos de ayuda** en los botones del Expanded: Anterior, Pausar / Reproducir (según el estado) y
+  Siguiente, en el idioma elegido.
 - **Pausa o parada** → la isla sigue visible **3 minutos** y luego se oculta del todo (no se ve). No
   reaparece por eventos de la canción en pausa: solo cuando vuelve a **reproducir**. Sin sesión multimedia
   (p. ej. cerraste Spotify) se oculta al instante, porque no hay nada que mostrar.
@@ -80,6 +82,7 @@ src/
     ├── iconos.rs      iconos de control
     ├── bandeja.rs     icono junto al reloj, su menú y su icono dibujado en código
     ├── textos.rs      textos de la interfaz en español e inglés; idioma tomado de Windows
+    ├── tooltip.rs     globos de ayuda de los botones (control de Windows, una zona por botón)
     ├── gancho.rs      gancho de ratón para el clic fuera
     ├── tema.rs        medidas y colores
     └── escala.rs      escala por DPI

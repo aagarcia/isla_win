@@ -5,6 +5,7 @@
 //! pinta una vez) de lo que **se mueve** (onda, progreso, texto desplazándose: se pinta en cada fotograma).
 
 use super::escala::Escala;
+use crate::dominio::control::Accion;
 use super::gdi::Lienzo;
 use super::vista_musica::VistaMusica;
 use windows::Win32::Foundation::{POINT, RECT};
@@ -29,6 +30,12 @@ pub trait Vista {
 
     /// ¿Hay un botón bajo `punto` en el estado expandido?
     fn hay_boton_en(&self, punto: POINT, area: RECT, escala: Escala) -> bool;
+
+    /// Zona y acción de cada botón del estado expandido (para los globos de ayuda).
+    fn zonas_botones(&self, area: RECT, escala: Escala) -> Vec<(RECT, Accion)>;
+
+    /// Texto del globo de ayuda de un botón.
+    fn texto_boton(&self, accion: Accion) -> &'static str;
 
     /// Atiende un clic en el estado expandido. Devuelve true si pulsó un botón.
     fn pulsar(&self, punto: POINT, area: RECT, escala: Escala) -> bool;

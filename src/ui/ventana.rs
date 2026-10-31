@@ -5,6 +5,7 @@ use super::bandeja::{self, Orden, WM_BANDEJA};
 use super::escala::Escala;
 use super::gancho::{self, WM_CLIC_FUERA};
 use super::gdi::pintar_en_capas;
+use super::tooltip;
 use super::tema::{COMPACTO, EXPANDIDO, INTERVALO_ANIMACION_MS, MINIMO, RADIO_ISLA};
 use super::vista::{self, Modo};
 use crate::dominio::preferencias::{Preferencias, Reposo};
@@ -55,6 +56,7 @@ pub fn crear() -> windows::core::Result<HWND> {
         let _ = SetLayeredWindowAttributes(ventana, COLORREF(0), 255, LWA_ALPHA);
         aplicar_tamano(ventana);
         bandeja::agregar(ventana)?;
+        tooltip::crear(ventana);
         Ok(ventana)
     }
 }
@@ -83,6 +85,7 @@ unsafe extern "system" fn procedimiento(ventana: HWND, mensaje: u32, wparam: WPA
             WM_CLIC_FUERA => al_clic_fuera(ventana),
             WM_BANDEJA => al_tocar_bandeja(ventana, lparam),
             WM_COMMAND => al_elegir_en_menu(ventana, wparam),
+            WM_NOTIFY => al_pedir_texto_de_ayuda(ventana, lparam),
             WM_TIMER if wparam.0 == ID_TIMER_INACTIVIDAD => al_cambiar_estado(ventana), // venció la espera
             WM_TIMER => al_temporizador(ventana),
             WM_LBUTTONDOWN => al_clic(ventana, coordenadas(lparam)),
@@ -199,6 +202,17 @@ unsafe fn ejecutar(ventana: HWND, orden: Orden) {
     }
 }
 
+/// Windows pregunta qué texto lleva el globo de un botón (por su posición en `zonas_botones`).
+unsafe fn al_pedir_texto_de_ayuda(ventana: HWND, lparam: LPARAM) {
+    unsafe {
+        let Some(indice) = tooltip::indice_pedido(lparam) else { return };
+        let Some(vista) = vista::activa() else { return };
+        if let Some(&(_, accion)) = vista.zonas_botones(area_cliente(ventana), Escala::actual()).get(indice) {
+            tooltip::responder(lparam, vista.texto_boton(accion));
+        }
+    }
+}
+
 unsafe fn al_clic_fuera(ventana: HWND) {
     unsafe {
         if EXPANDIDA.load(Ordering::Relaxed) {
@@ -279,6 +293,13 @@ unsafe fn aplicar_tamano(ventana: HWND) {
         // esquinas superiores rectas: el redondeo sube por encima del borde de la pantalla
         let radio = Escala::actual().px(RADIO_ISLA);
         SetWindowRgn(ventana, Some(CreateRoundRectRgn(0, -radio, ancho + 1, alto + 1, 2 * radio, 2 * radio)), true);
+        let zonas: Vec<RECT> = match vista::activa() {
+            Some(v) if EXPANDIDA.load(Ordering::Relaxed) => {
+                v.zonas_botones(area_cliente(ventana), Escala::actual()).into_iter().map(|(zona, _)| zona).collect()
+            }
+            _ => Vec::new(),
+        };
+        tooltip::colocar(ventana, &zonas);
     }
 }
 

@@ -28,6 +28,8 @@ to control it.
 - Something plays in Windows → the island appears on its own (also while paused).
 - **Click** the island → it expands. In Expanded, the buttons control playback; a **click on any other area
   of the island, or anywhere outside it**, compacts it again.
+- **Tooltips** on the Expanded buttons: Previous, Pause / Play (depending on state) and Next, in the
+  chosen language.
 - **Pause or stop** → the island stays visible for **3 minutes** and then hides completely. It does not
   reappear on events from the paused song: only when it **plays** again. With no media session
   (e.g. you closed Spotify) it hides immediately, since there is nothing to show.
@@ -79,6 +81,7 @@ src/
     ├── iconos.rs      control icons
     ├── bandeja.rs     tray icon, its menu and its code-drawn icon
     ├── textos.rs      UI texts in Spanish and English; language taken from Windows
+    ├── tooltip.rs     button tooltips (Windows control, one zone per button)
     ├── gancho.rs      mouse hook for click-outside
     ├── tema.rs        measurements and colors
     └── escala.rs      DPI scaling

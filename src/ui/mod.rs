@@ -7,6 +7,7 @@ mod gdi;
 mod iconos;
 mod tema;
 mod textos;
+mod tooltip;
 mod vista;
 mod vista_musica;
 pub mod ventana;

@@ -4,6 +4,7 @@ use super::escala::Escala;
 use super::gdi::{Fuente, Lienzo};
 use super::iconos::{self, Icono};
 use super::tema::*;
+use super::textos;
 use super::vista::{Modo, Vista};
 use crate::dominio::control::Accion;
 use crate::dominio::{animacion, pista::Pista};
@@ -230,6 +231,20 @@ impl Vista for VistaMusica {
                 }
                 false
             }
+        }
+    }
+
+    fn zonas_botones(&self, area: RECT, escala: Escala) -> Vec<(RECT, Accion)> {
+        Self::botones(area.right, escala).to_vec()
+    }
+
+    fn texto_boton(&self, accion: Accion) -> &'static str {
+        let textos = textos::actuales();
+        match accion {
+            Accion::Anterior => textos.anterior,
+            Accion::Siguiente => textos.siguiente,
+            Accion::PlayPausa if self.pista.reproduciendo => textos.pausar,
+            Accion::PlayPausa => textos.reproducir,
         }
     }
 

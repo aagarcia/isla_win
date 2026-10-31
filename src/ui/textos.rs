@@ -16,10 +16,16 @@ pub struct Textos {
     pub reposo: &'static str,
     pub idioma: &'static str,
     pub cerrar: &'static str,
+    pub anterior: &'static str,
+    pub siguiente: &'static str,
+    pub reproducir: &'static str,
+    pub pausar: &'static str,
 }
 
-const ES: Textos = Textos { mostrar: "Mostrar isla", ocultar: "Ocultar isla", reposo: "Tamaño en reposo", idioma: "Idioma", cerrar: "Cerrar" };
-const EN: Textos = Textos { mostrar: "Show island", ocultar: "Hide island", reposo: "Resting size", idioma: "Language", cerrar: "Close" };
+const ES: Textos = Textos { mostrar: "Mostrar isla", ocultar: "Ocultar isla", reposo: "Tamaño en reposo", idioma: "Idioma", cerrar: "Cerrar",
+    anterior: "Anterior", siguiente: "Siguiente", reproducir: "Reproducir", pausar: "Pausar" };
+const EN: Textos = Textos { mostrar: "Show island", ocultar: "Hide island", reposo: "Resting size", idioma: "Language", cerrar: "Close",
+    anterior: "Previous", siguiente: "Next", reproducir: "Play", pausar: "Pause" };
 
 /// Idioma primario de Windows (`LANGID & 0x3FF`): 0x0A es español; cualquier otro, inglés.
 fn de_windows(langid: u16) -> Idioma {
@@ -79,7 +85,7 @@ mod pruebas {
     #[test]
     fn ninguna_tabla_tiene_textos_vacios() {
         for t in [&ES, &EN] {
-            assert!([t.mostrar, t.ocultar, t.reposo, t.idioma, t.cerrar].iter().all(|s| !s.is_empty()));
+            assert!([t.mostrar, t.ocultar, t.reposo, t.idioma, t.cerrar, t.anterior, t.siguiente, t.reproducir, t.pausar].iter().all(|s| !s.is_empty()));
         }
     }
 
