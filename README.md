@@ -43,6 +43,16 @@ expande para controlarlo.
 - **Idioma**: al arrancar, español si Windows está en español e inglés en cualquier otro caso. Se cambia
   desde el menú de la bandeja (**Idioma**); la elección vive en memoria y se pierde al cerrar.
 
+## Publicar una versión
+
+Subir un tag que coincida con la versión de `Cargo.toml` publica la Release sola (`.github/workflows/release.yml`:
+pruebas, compilación release y un zip con el `.exe` y su SHA-256). El `.exe` no está firmado.
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Requisitos para compilar
 
 - Rust (toolchain `stable-x86_64-pc-windows-msvc`).

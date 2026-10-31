@@ -1,0 +1,46 @@
+# Al subir un tag `vX.Y.Z`: prueba, compila en release y publica el .exe en una Release de GitHub.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: El tag debe coincidir con la versión de Cargo.toml
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "El tag ${{ github.ref_name }} no coincide con Cargo.toml ($version)" }
+
+      - name: Pruebas
+        run: cargo test --locked
+
+      - name: Compilar
+        run: cargo build --release --locked
+
+      - name: Empaquetar
+        shell: pwsh
+        run: |
+          $zip = "isla_win-${{ github.ref_name }}-windows-x64.zip"
+          Compress-Archive -Path target/release/isla_win.exe, README.md, README.en.md -DestinationPath $zip
+          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  " + $zip | Out-File -Encoding ascii "$zip.sha256"
+
+      - name: Publicar la Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notas = @"
+          **Español**: isla estilo "Dynamic Island" para Windows. Descomprime y ejecuta ``isla_win.exe``; se controla desde el icono de la bandeja. El ejecutable no está firmado: Windows SmartScreen o tu antivirus pueden avisar.
+
+          **English**: "Dynamic Island"-style widget for Windows. Unzip and run ``isla_win.exe``; it is controlled from the tray icon. The executable is unsigned: Windows SmartScreen or your antivirus may warn.
+          "@
+          gh release create "${{ github.ref_name }}" isla_win-*.zip isla_win-*.zip.sha256 --title "${{ github.ref_name }}" --notes "$notas" --generate-notes

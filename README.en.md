@@ -42,6 +42,17 @@ to control it.
 - **Language**: at startup, Spanish if Windows' display language is Spanish, English otherwise. Change it
   from the tray menu (**Language**); the choice lives in memory and is lost on close.
 
+## Publishing a version
+
+Pushing a tag that matches the `Cargo.toml` version publishes the Release by itself
+(`.github/workflows/release.yml`: tests, release build and a zip with the `.exe` and its SHA-256). The `.exe` is
+unsigned.
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Build requirements
 
 - Rust (toolchain `stable-x86_64-pc-windows-msvc`).
